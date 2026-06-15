@@ -76,10 +76,6 @@ checksums, and updates `niieani/homebrew-tap`.
 Published archives cover Apple Silicon macOS plus Linux amd64/arm64. Intel
 macOS users should build from source.
 
-The publish workflow requires the `OP_SERVICE_ACCOUNT_TOKEN` repository secret.
-Apple notarization credentials and the Homebrew tap token are loaded from
-1Password during the workflow.
-
 ## Authentication
 
 Log in with Codex first:
