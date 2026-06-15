@@ -25,7 +25,10 @@ Download the latest release for the current platform:
 ```sh
 set -euo pipefail
 case "$(uname -s)-$(uname -m)" in
-  Darwin-x86_64) asset="darwin_amd64" ;;
+  Darwin-x86_64)
+    echo "darwin_amd64 releases are not published; build from source" >&2
+    exit 1
+    ;;
   Darwin-arm64) asset="darwin_arm64" ;;
   Linux-x86_64) asset="linux_amd64" ;;
   Linux-aarch64 | Linux-arm64) asset="linux_arm64" ;;
@@ -69,6 +72,9 @@ Requires a recent Rust toolchain with edition 2024 support.
 Releases are managed by Release Please. When a release is published, GitHub
 Actions builds macOS and Linux archives, notarizes macOS binaries, uploads
 checksums, and updates `niieani/homebrew-tap`.
+
+Published archives cover Apple Silicon macOS plus Linux amd64/arm64. Intel
+macOS users should build from source.
 
 The publish workflow requires the `OP_SERVICE_ACCOUNT_TOKEN` repository secret.
 Apple notarization credentials and the Homebrew tap token are loaded from

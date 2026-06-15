@@ -6,7 +6,7 @@
 - Release Please on `main`: conventional commits -> release PR -> GitHub release.
 - Manifest starts at `0.0.0` so the first release PR publishes `0.1.0`.
 - Release publish on GitHub release/manual dispatch:
-  - build native macOS/Linux release binaries
+  - build Apple Silicon macOS and Linux release binaries
   - sign/notarize macOS binaries
   - upload tarballs and checksums
   - load Homebrew tap token from 1Password
@@ -14,7 +14,6 @@
 
 ## Artifacts
 
-- `imagegen_<version>_darwin_amd64.tar.gz`
 - `imagegen_<version>_darwin_arm64.tar.gz`
 - `imagegen_<version>_linux_amd64.tar.gz`
 - `imagegen_<version>_linux_arm64.tar.gz`

@@ -32,10 +32,6 @@ jobs:
       matrix:
         include:
           - runner: macos-14
-            target: x86_64-apple-darwin
-            asset_suffix: darwin_amd64
-            notarize: true
-          - runner: macos-14
             target: aarch64-apple-darwin
             asset_suffix: darwin_arm64
             notarize: true
@@ -224,14 +220,9 @@ jobs:
             binary "imagegen"
 
             on_macos do
-              on_intel do
-                url "https://github.com/niieani/imagegen/releases/download/v#{version}/imagegen_#{version}_darwin_amd64.tar.gz"
-                sha256 "$(sha_for darwin_amd64)"
-              end
-              on_arm do
-                url "https://github.com/niieani/imagegen/releases/download/v#{version}/imagegen_#{version}_darwin_arm64.tar.gz"
-                sha256 "$(sha_for darwin_arm64)"
-              end
+              depends_on arch: :arm64
+              url "https://github.com/niieani/imagegen/releases/download/v#{version}/imagegen_#{version}_darwin_arm64.tar.gz"
+              sha256 "$(sha_for darwin_arm64)"
             end
 
             on_linux do
