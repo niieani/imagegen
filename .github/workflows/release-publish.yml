@@ -1,0 +1,256 @@
+name: Release Publish
+
+on:
+  release:
+    types:
+      - published
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag to publish.
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    name: Build ${{ matrix.asset_suffix }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-13
+            target: x86_64-apple-darwin
+            asset_suffix: darwin_amd64
+            notarize: true
+          - runner: macos-14
+            target: aarch64-apple-darwin
+            asset_suffix: darwin_arm64
+            notarize: true
+          - runner: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            asset_suffix: linux_amd64
+            notarize: false
+          - runner: ubuntu-24.04-arm
+            target: aarch64-unknown-linux-gnu
+            asset_suffix: linux_arm64
+            notarize: false
+    steps:
+      - name: Resolve release tag
+        id: release
+        run: |
+          tag="${{ github.event.release.tag_name || inputs.tag }}"
+          version="${tag#v}"
+          printf "tag=%s\n" "$tag" >> "$GITHUB_OUTPUT"
+          printf "version=%s\n" "$version" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ steps.release.outputs.tag }}
+
+      - name: Cache Cargo
+        uses: Swatinem/rust-cache@v2
+
+      - name: Add target
+        run: rustup target add ${{ matrix.target }}
+
+      - name: Build
+        run: cargo build --release --locked --target ${{ matrix.target }}
+
+      - name: Install 1Password CLI
+        if: matrix.notarize
+        uses: 1password/install-cli-action@v2
+
+      - name: Configure 1Password service account
+        if: matrix.notarize
+        uses: 1password/load-secrets-action/configure@v3
+        with:
+          service-account-token: ${{ secrets.OP_SERVICE_ACCOUNT_TOKEN }}
+
+      - name: Load Apple release metadata
+        if: matrix.notarize
+        uses: 1password/load-secrets-action@v3
+        with:
+          export-env: true
+          unset-previous: true
+        env:
+          MACOS_NOTARY_ISSUER_ID: op://Automation/Apple Developer App Store Connect AuthKey Github Releases/NOTARY_ISSUER_ID
+          MACOS_NOTARY_KEY_ID: op://Automation/Apple Developer App Store Connect AuthKey Github Releases/NOTARY_KEY_ID
+          MACOS_SIGN_PASSWORD: op://Automation/Apple Release Signing Developer ID Certificate/password
+
+      - name: Sign and notarize macOS binary
+        if: matrix.notarize
+        env:
+          BINARY_PATH: target/${{ matrix.target }}/release/imagegen
+        run: |
+          set -euo pipefail
+          temp_dir="$(mktemp -d)"
+          keychain_path="$RUNNER_TEMP/imagegen-signing.keychain-db"
+          keychain_password="$(openssl rand -hex 24)"
+          trap 'rm -rf "$temp_dir"; security delete-keychain "$keychain_path" >/dev/null 2>&1 || true' EXIT
+
+          op read 'op://Automation/Apple Developer App Store Connect AuthKey Github Releases/AuthKey.p8' --out-file "$temp_dir/AuthKey.p8"
+          op read 'op://Automation/Apple Release Signing Developer ID Certificate/Apple Release Signing Developer ID Certificate.p12' --out-file "$temp_dir/developer-id.p12"
+
+          security create-keychain -p "$keychain_password" "$keychain_path"
+          security default-keychain -s "$keychain_path"
+          security unlock-keychain -p "$keychain_password" "$keychain_path"
+          security set-keychain-settings -lut 21600 "$keychain_path"
+          security import "$temp_dir/developer-id.p12" -k "$keychain_path" -P "$MACOS_SIGN_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$keychain_password" "$keychain_path"
+
+          identity="$(security find-identity -v -p codesigning "$keychain_path" | awk -F '"' '/Developer ID Application/ { print $2; exit }')"
+          if [ -z "$identity" ]; then
+            echo "Developer ID Application signing identity not found" >&2
+            exit 1
+          fi
+
+          codesign --force --timestamp --options runtime --sign "$identity" "$BINARY_PATH"
+          codesign --verify --strict --verbose=2 "$BINARY_PATH"
+
+          ditto -c -k --keepParent "$BINARY_PATH" "$temp_dir/imagegen.zip"
+          xcrun notarytool submit "$temp_dir/imagegen.zip" \
+            --key "$temp_dir/AuthKey.p8" \
+            --key-id "$MACOS_NOTARY_KEY_ID" \
+            --issuer "$MACOS_NOTARY_ISSUER_ID" \
+            --wait
+
+      - name: Package
+        run: |
+          set -euo pipefail
+          version="${{ steps.release.outputs.version }}"
+          staging_dir="dist/imagegen_${version}_${{ matrix.asset_suffix }}"
+          archive="imagegen_${version}_${{ matrix.asset_suffix }}.tar.gz"
+          mkdir -p "$staging_dir"
+          cp "target/${{ matrix.target }}/release/imagegen" "$staging_dir/imagegen"
+          cp README.md LICENSE "$staging_dir/"
+          tar -C "$staging_dir" -czf "dist/$archive" .
+
+      - name: Upload archive
+        uses: actions/upload-artifact@v4
+        with:
+          name: imagegen_${{ steps.release.outputs.version }}_${{ matrix.asset_suffix }}
+          path: dist/*.tar.gz
+          if-no-files-found: error
+
+  publish:
+    name: Upload release assets and update Homebrew tap
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Resolve release tag
+        id: release
+        run: |
+          tag="${{ github.event.release.tag_name || inputs.tag }}"
+          version="${tag#v}"
+          printf "tag=%s\n" "$tag" >> "$GITHUB_OUTPUT"
+          printf "version=%s\n" "$version" >> "$GITHUB_OUTPUT"
+
+      - name: Download archives
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Generate checksums
+        working-directory: dist
+        run: sha256sum *.tar.gz > checksums.txt
+
+      - name: Upload release assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ steps.release.outputs.tag }}
+        run: gh release upload "$RELEASE_TAG" dist/*.tar.gz dist/checksums.txt --clobber
+
+      - name: Install 1Password CLI
+        uses: 1password/install-cli-action@v2
+
+      - name: Configure 1Password service account
+        uses: 1password/load-secrets-action/configure@v3
+        with:
+          service-account-token: ${{ secrets.OP_SERVICE_ACCOUNT_TOKEN }}
+
+      - name: Load Homebrew tap token
+        uses: 1password/load-secrets-action@v3
+        with:
+          export-env: true
+          unset-previous: true
+        env:
+          HOMEBREW_TAP_GITHUB_TOKEN: op://Automation/GitHub Token for homebrew-tap/token
+
+      - name: Checkout Homebrew tap
+        uses: actions/checkout@v6
+        with:
+          repository: niieani/homebrew-tap
+          path: homebrew-tap
+          token: ${{ env.HOMEBREW_TAP_GITHUB_TOKEN }}
+
+      - name: Update cask
+        env:
+          VERSION: ${{ steps.release.outputs.version }}
+        run: |
+          set -euo pipefail
+          sha_for() {
+            sha256sum "dist/imagegen_${VERSION}_$1.tar.gz" | awk '{ print $1 }'
+          }
+          mkdir -p homebrew-tap/Casks
+          cat > homebrew-tap/Casks/imagegen.rb <<EOF
+          # This file is generated by niieani/imagegen release automation. DO NOT EDIT.
+          cask "imagegen" do
+            name "imagegen"
+            desc "Codex-authenticated OpenAI image generation CLI"
+            homepage "https://github.com/niieani/imagegen"
+            version "${VERSION}"
+
+            livecheck do
+              url :url
+              strategy :github_latest
+            end
+
+            binary "imagegen"
+
+            on_macos do
+              on_intel do
+                url "https://github.com/niieani/imagegen/releases/download/v#{version}/imagegen_#{version}_darwin_amd64.tar.gz"
+                sha256 "$(sha_for darwin_amd64)"
+              end
+              on_arm do
+                url "https://github.com/niieani/imagegen/releases/download/v#{version}/imagegen_#{version}_darwin_arm64.tar.gz"
+                sha256 "$(sha_for darwin_arm64)"
+              end
+            end
+
+            on_linux do
+              on_intel do
+                url "https://github.com/niieani/imagegen/releases/download/v#{version}/imagegen_#{version}_linux_amd64.tar.gz"
+                sha256 "$(sha_for linux_amd64)"
+              end
+              on_arm do
+                url "https://github.com/niieani/imagegen/releases/download/v#{version}/imagegen_#{version}_linux_arm64.tar.gz"
+                sha256 "$(sha_for linux_arm64)"
+              end
+            end
+          end
+          EOF
+          ruby -c homebrew-tap/Casks/imagegen.rb
+
+      - name: Push Homebrew tap update
+        working-directory: homebrew-tap
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Casks/imagegen.rb
+          if git diff --cached --quiet; then
+            echo "Homebrew cask already current."
+          else
+            git commit -m "Update imagegen cask to ${{ steps.release.outputs.tag }}"
+            git push
+          fi
