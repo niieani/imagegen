@@ -103,7 +103,6 @@ supports_websockets = false
 ```sh
 imagegen generate \
   --prompt "a small blue ceramic teapot on a white table" \
-  --quality low \
   --out teapot.png
 ```
 
@@ -116,13 +115,15 @@ available.
 
 ## Edit
 
-Pass one or more input images with repeated `--image` flags:
+Pass one or more input images with repeated `--image` flags. Inputs can be
+edited directly or used as references for a new image; make the prompt specify
+what to do with them:
 
 ```sh
 imagegen edit \
   --image input-1.png \
   --image input-2.webp \
-  --prompt "combine these into one product photo" \
+  --prompt "use these inputs as references and combine them into one product photo" \
   --out combined.png
 ```
 
@@ -133,7 +134,7 @@ At most 5 input images are accepted.
 Both `generate` and `edit` expose:
 
 - `--prompt`
-- `--out`
+- `--out` `.png` output path; parent directories are created as needed
 - `--model` default `gpt-image-2`
 - `--background` one of `auto`, `opaque`, `transparent`
 - `--quality` one of `auto`, `low`, `medium`, `high`
@@ -141,8 +142,8 @@ Both `generate` and `edit` expose:
 - `--n`
 - `--transport` one of `codex-hosted`, `image-api`
 
-`edit` additionally requires one or more `--image` paths. Supported input
-formats: PNG, JPEG, WebP.
+`edit` additionally requires one or more repeated `--image` paths. Supported
+input formats: PNG, JPEG, WebP.
 
 For `codex-hosted`, omit `--n` or set `--n 1`. The direct `image-api` transport
 passes `--n` through to the Images API request.
