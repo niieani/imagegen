@@ -31,7 +31,7 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - runner: macos-13
+          - runner: macos-15-intel
             target: x86_64-apple-darwin
             asset_suffix: darwin_amd64
             notarize: true
