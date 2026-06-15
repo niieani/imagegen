@@ -2,8 +2,10 @@
 
 Standalone Rust CLI companion for Codex-authenticated OpenAI image generation.
 
-`imagegen` reuses the Codex login in `CODEX_HOME` or `~/.codex`, then calls the
-Codex-hosted Responses image generation transport by default.
+`imagegen` reuses Codex config in `CODEX_HOME` or `~/.codex`. With the default
+OpenAI provider, it uses the Codex-hosted Responses image generation transport;
+with a custom `model_provider`, it routes through that provider's direct Images
+API config.
 
 ## Install
 
@@ -80,8 +82,21 @@ Log in with Codex first:
 codex login
 ```
 
-The CLI hard-fails if Codex ChatGPT/backend authentication is unavailable.
-It does not silently fall back to `OPENAI_API_KEY`.
+The Codex-hosted transport hard-fails if Codex ChatGPT/backend authentication is
+unavailable. It does not silently fall back to `OPENAI_API_KEY`.
+
+For custom providers, configure Codex as usual:
+
+```toml
+model_provider = "custom"
+
+[model_providers.custom]
+name = "Custom Images"
+base_url = "https://images.example.com/v1"
+env_key = "CUSTOM_IMAGE_API_KEY"
+wire_api = "responses"
+supports_websockets = false
+```
 
 ## Generate
 
@@ -92,10 +107,12 @@ imagegen generate \
   --out teapot.png
 ```
 
-Default transport is `codex-hosted`, which uses Codex OAuth against the
-Responses API image generation tool. It supports one output image per request.
-Use `--transport image-api` only for a custom/future direct Images API endpoint;
-the current live Codex backend does not expose the direct images endpoint.
+Default transport is provider-aware. The built-in OpenAI provider uses
+`codex-hosted`, which uses Codex OAuth against the Responses API image
+generation tool and supports one output image per request. Custom
+`model_provider` entries use `image-api` by default. Pass
+`--transport codex-hosted` to force Codex-hosted generation when Codex login is
+available.
 
 ## Edit
 

@@ -24,30 +24,46 @@ use image_io::write_base64_image;
 pub async fn run(cli: Cli) -> Result<PathBuf> {
     let codex_config = CodexConfig::load(cli.codex_home).await?;
     let out = match cli.command {
-        Command::Generate(args) if args.transport == TransportArg::ImageApi => {
-            direct_image_api_generate(&codex_config, &args).await?
-        }
         Command::Generate(args) => {
-            let result = hosted_image_generation(&codex_config, HostedImageArgs::from(&args), None)
-                .await
-                .context("image generation request failed")?;
-            write_base64_image(&result, &args.out).await?;
-            args.out
-        }
-        Command::Edit(args) if args.transport == TransportArg::ImageApi => {
-            direct_image_api_edit(&codex_config, &args).await?
+            if resolve_transport(&codex_config, args.transport) == TransportArg::ImageApi {
+                direct_image_api_generate(&codex_config, &args).await?
+            } else {
+                let result =
+                    hosted_image_generation(&codex_config, HostedImageArgs::from(&args), None)
+                        .await
+                        .context("image generation request failed")?;
+                write_base64_image(&result, &args.out).await?;
+                args.out
+            }
         }
         Command::Edit(args) => {
-            let input_images = edit_input_images(&args).await?;
-            let result =
-                hosted_image_generation(&codex_config, HostedImageArgs::from(&args), input_images)
-                    .await
-                    .context("image edit request failed")?;
-            write_base64_image(&result, &args.out).await?;
-            args.out
+            if resolve_transport(&codex_config, args.transport) == TransportArg::ImageApi {
+                direct_image_api_edit(&codex_config, &args).await?
+            } else {
+                let input_images = edit_input_images(&args).await?;
+                let result = hosted_image_generation(
+                    &codex_config,
+                    HostedImageArgs::from(&args),
+                    input_images,
+                )
+                .await
+                .context("image edit request failed")?;
+                write_base64_image(&result, &args.out).await?;
+                args.out
+            }
         }
     };
     Ok(out)
+}
+
+fn resolve_transport(config: &CodexConfig, transport: Option<TransportArg>) -> TransportArg {
+    transport.unwrap_or_else(|| {
+        if config.defaults_to_image_api_transport() {
+            TransportArg::ImageApi
+        } else {
+            TransportArg::CodexHosted
+        }
+    })
 }
 
 #[cfg(test)]
@@ -60,6 +76,7 @@ mod tests {
     use codex_api::ImageBackground;
     use codex_api::ImageGenerationRequest;
     use codex_api::ImageQuality;
+    use codex_model_provider_info::WireApi;
     use pretty_assertions::assert_eq;
     use serde_json::json;
 
@@ -137,6 +154,37 @@ mod tests {
         );
     }
 
+    #[test]
+    fn transport_is_optional_and_explicit_choice_is_preserved() {
+        let defaulted = Cli::parse_from([
+            "imagegen",
+            "generate",
+            "--prompt",
+            "a red square",
+            "--out",
+            "out.png",
+        ]);
+        let Command::Generate(defaulted_args) = defaulted.command else {
+            panic!("expected generate command");
+        };
+        assert_eq!(defaulted_args.transport, None);
+
+        let explicit = Cli::parse_from([
+            "imagegen",
+            "generate",
+            "--prompt",
+            "a red square",
+            "--out",
+            "out.png",
+            "--transport",
+            "codex-hosted",
+        ]);
+        let Command::Generate(explicit_args) = explicit.command else {
+            panic!("expected generate command");
+        };
+        assert_eq!(explicit_args.transport, Some(TransportArg::CodexHosted));
+    }
+
     #[tokio::test]
     async fn edit_rejects_more_than_five_images() {
         let args = EditArgs {
@@ -150,7 +198,7 @@ mod tests {
             quality: QualityArg::Auto,
             size: "auto".to_string(),
             n: None,
-            transport: TransportArg::CodexHosted,
+            transport: Some(TransportArg::CodexHosted),
         };
 
         let err = edit_request(&args).await.expect_err("should reject cap");
@@ -193,6 +241,51 @@ mod tests {
         assert_eq!(
             codex_image_base_url("https://chatgpt.com/backend-api/"),
             "https://chatgpt.com/backend-api/api/codex"
+        );
+    }
+
+    #[test]
+    fn default_provider_routes_codex_hosted_when_transport_is_omitted() {
+        let config =
+            CodexConfig::from_raw(PathBuf::from("/tmp/codex"), RawCodexConfig::default()).unwrap();
+
+        assert!(!config.defaults_to_image_api_transport());
+        assert_eq!(resolve_transport(&config, None), TransportArg::CodexHosted);
+    }
+
+    #[test]
+    fn selected_custom_model_provider_routes_image_api_by_default() {
+        let raw_config: RawCodexConfig = toml::from_str(
+            r#"
+model_provider = "custom"
+
+[model_providers.custom]
+name = "Custom Images"
+base_url = "https://images.example.com/v1"
+env_key = "CUSTOM_IMAGE_API_KEY"
+wire_api = "responses"
+supports_websockets = false
+"#,
+        )
+        .unwrap();
+        let config = CodexConfig::from_raw(PathBuf::from("/tmp/codex"), raw_config).unwrap();
+
+        assert_eq!(config.model_provider_id, "custom");
+        assert_eq!(config.model_provider.name, "Custom Images");
+        assert_eq!(
+            config.model_provider.base_url.as_deref(),
+            Some("https://images.example.com/v1")
+        );
+        assert_eq!(
+            config.model_provider.env_key.as_deref(),
+            Some("CUSTOM_IMAGE_API_KEY")
+        );
+        assert_eq!(config.model_provider.wire_api, WireApi::Responses);
+        assert!(config.defaults_to_image_api_transport());
+        assert_eq!(resolve_transport(&config, None), TransportArg::ImageApi);
+        assert_eq!(
+            resolve_transport(&config, Some(TransportArg::CodexHosted)),
+            TransportArg::CodexHosted
         );
     }
 

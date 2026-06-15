@@ -38,14 +38,19 @@ pub(crate) async fn authenticated_responses_session(
 pub(crate) async fn authenticated_images_client(
     config: &CodexConfig,
 ) -> Result<ImagesClient<ReqwestTransport>> {
-    let auth_manager =
-        AuthManager::shared_from_config(config, /*enable_codex_api_key_env*/ false).await;
-    if !auth_manager.current_auth_uses_codex_backend() {
-        bail!("Codex ChatGPT/backend authentication not found; run `codex login` first");
-    }
+    let provider_info = config.model_provider.clone();
+    let auth_manager = if provider_info.requires_openai_auth {
+        let auth_manager =
+            AuthManager::shared_from_config(config, /*enable_codex_api_key_env*/ false).await;
+        if !auth_manager.current_auth_uses_codex_backend() {
+            bail!("Codex ChatGPT/backend authentication not found; run `codex login` first");
+        }
+        Some(auth_manager)
+    } else {
+        None
+    };
 
-    let provider_info = ModelProviderInfo::create_openai_provider(config.openai_base_url.clone());
-    let provider = create_model_provider(provider_info, Some(auth_manager));
+    let provider = create_model_provider(provider_info, auth_manager);
     let api_provider = provider
         .api_provider()
         .await

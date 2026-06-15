@@ -48,8 +48,8 @@ pub struct GenerateArgs {
     #[arg(long)]
     pub n: Option<u64>,
 
-    #[arg(long, default_value_t = TransportArg::CodexHosted)]
-    pub transport: TransportArg,
+    #[arg(long)]
+    pub transport: Option<TransportArg>,
 }
 
 #[derive(Debug, Parser, Clone, PartialEq, Eq)]
@@ -78,8 +78,8 @@ pub struct EditArgs {
     #[arg(long)]
     pub n: Option<u64>,
 
-    #[arg(long, default_value_t = TransportArg::CodexHosted)]
-    pub transport: TransportArg,
+    #[arg(long)]
+    pub transport: Option<TransportArg>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
