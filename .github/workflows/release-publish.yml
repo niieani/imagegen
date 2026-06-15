@@ -172,8 +172,9 @@ jobs:
       - name: Upload release assets
         env:
           GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
           RELEASE_TAG: ${{ steps.release.outputs.tag }}
-        run: gh release upload "$RELEASE_TAG" dist/*.tar.gz dist/checksums.txt --clobber
+        run: gh release upload --repo "$GH_REPO" "$RELEASE_TAG" dist/*.tar.gz dist/checksums.txt --clobber
 
       - name: Install 1Password CLI
         uses: 1password/install-cli-action@v2
