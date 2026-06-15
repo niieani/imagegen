@@ -6,7 +6,13 @@ on:
       - published
   workflow_dispatch:
     inputs:
-      tag:
+      ref:
+        description: Release tag to publish.
+        required: true
+        type: string
+  workflow_call:
+    inputs:
+      ref:
         description: Release tag to publish.
         required: true
         type: string
@@ -45,7 +51,7 @@ jobs:
       - name: Resolve release tag
         id: release
         run: |
-          tag="${{ github.event.release.tag_name || inputs.tag }}"
+          tag="${{ github.event.release.tag_name || inputs.ref }}"
           version="${tag#v}"
           printf "tag=%s\n" "$tag" >> "$GITHUB_OUTPUT"
           printf "version=%s\n" "$version" >> "$GITHUB_OUTPUT"
@@ -148,7 +154,7 @@ jobs:
       - name: Resolve release tag
         id: release
         run: |
-          tag="${{ github.event.release.tag_name || inputs.tag }}"
+          tag="${{ github.event.release.tag_name || inputs.ref }}"
           version="${tag#v}"
           printf "tag=%s\n" "$tag" >> "$GITHUB_OUTPUT"
           printf "version=%s\n" "$version" >> "$GITHUB_OUTPUT"
