@@ -4,7 +4,7 @@
 
 `imagegen` should be usable as a companion binary without requiring users to clone the repo or build Rust dependencies. The release system therefore owns three outcomes: verified source changes, notarized macOS/Linux release archives, and a Homebrew cask path that stays current after each release.
 
-The repo is intentionally small, but the dependency graph comes from Codex git crates. CI should validate the Rust surface directly rather than introducing a release framework that hides the build. Release artifacts are predictable tarballs named by platform and architecture; Homebrew cask URLs are derived from the GitHub release tag.
+The repo is intentionally small, but the dependency graph comes from Codex git crates. CI should validate the Rust surface directly rather than introducing a release framework that hides the build. Release artifacts are predictable tarballs named by platform and architecture; Homebrew cask URLs are derived from the GitHub release tag. `macos-13` is retired, and native Intel macOS builds are too slow for this release path; Apple Silicon runners can cross-build `x86_64-apple-darwin` quickly and still sign/notarize the resulting binary.
 
 ## Operating Model
 
@@ -14,4 +14,4 @@ The 1Password pattern follows `bb-project`: configure the service account from `
 
 ## Boundaries
 
-The first release cannot complete until `OP_SERVICE_ACCOUNT_TOKEN` exists in the GitHub repo secrets. CI and Release Please do not require that secret. The Homebrew tap receives a bootstrap cask locally, but the source repo publish workflow is authoritative for replacing cask checksums with exact release artifact hashes.
+The first release now has the required `OP_SERVICE_ACCOUNT_TOKEN` GitHub secret. CI and Release Please do not require that secret. The Homebrew tap receives a bootstrap cask locally, but the source repo publish workflow is authoritative for replacing cask checksums with exact release artifact hashes.
