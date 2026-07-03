@@ -72,6 +72,7 @@ mod tests {
     use std::path::Path;
     use std::path::PathBuf;
 
+    use clap::CommandFactory;
     use clap::Parser;
     use codex_api::ImageBackground;
     use codex_api::ImageGenerationRequest;
@@ -94,6 +95,47 @@ mod tests {
     use crate::image_io::edit_request;
     use crate::image_io::generation_request;
     use crate::image_io::image_mime_type;
+
+    #[test]
+    fn top_level_help_summarizes_gpt_image_2_output_guidance() {
+        let help = Cli::command().render_long_help().to_string();
+
+        assert!(help.contains("gpt-image-2"));
+        assert!(help.contains("3840x2160"));
+        assert!(help.contains("2160x3840"));
+        assert!(help.contains("background=transparent"));
+        assert!(help.contains("up to 2 minutes"));
+        assert!(help.contains("ALL required text"));
+        assert!(help.contains("very likely to render"));
+    }
+
+    #[test]
+    fn edit_help_explains_reference_prompting() {
+        let mut command = Cli::command();
+        let help = command
+            .find_subcommand_mut("edit")
+            .expect("edit subcommand should exist")
+            .render_long_help()
+            .to_string();
+
+        assert!(help.contains("Use repeated --image"));
+        assert!(help.contains("what must be"));
+        assert!(help.contains("preserved"));
+    }
+
+    #[test]
+    fn generate_help_calls_out_modern_text_rendering() {
+        let mut command = Cli::command();
+        let help = command
+            .find_subcommand_mut("generate")
+            .expect("generate subcommand should exist")
+            .render_long_help()
+            .to_string();
+
+        assert!(help.contains("newspaper pages or screenshots"));
+        assert!(help.contains("all prompt-provided text"));
+        assert!(help.contains("very likely to get it right"));
+    }
 
     #[test]
     fn generate_args_map_all_image_api_options() {

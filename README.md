@@ -115,11 +115,16 @@ generation tool and supports one output image per request. Custom
 `--transport codex-hosted` to force Codex-hosted generation when Codex login is
 available.
 
+Default image model is `gpt-image-2`. It supports `auto` or constrained
+`WIDTHxHEIGHT` sizes, including common sizes such as `1024x1024`,
+`1536x1024`, `1024x1536`, `2048x2048`, `2048x1152`, `3840x2160`, and
+`2160x3840`.
+
 ## Edit
 
 Pass one or more input images with repeated `--image` flags. Inputs can be
 edited directly or used as references for a new image; make the prompt specify
-what to do with them:
+what to do with them and what to preserve:
 
 ```sh
 imagegen edit \
@@ -138,9 +143,12 @@ Both `generate` and `edit` expose:
 - `--prompt`
 - `--out` `.png` output path; parent directories are created as needed
 - `--model` default `gpt-image-2`
-- `--background` one of `auto`, `opaque`, `transparent`
-- `--quality` one of `auto`, `low`, `medium`, `high`
-- `--size` default `auto`
+- `--background` one of `auto`, `opaque`, `transparent`; `gpt-image-2` does
+  not support `transparent`
+- `--quality` one of `auto`, `low`, `medium`, `high`; use `low` for drafts
+- `--size` default `auto`; for `gpt-image-2`, custom sizes must have max edge
+  `<=3840px`, both edges divisible by 16, aspect ratio `<=3:1`, and total
+  pixels between `655360` and `8294400`
 - `--n`
 - `--transport` one of `codex-hosted`, `image-api`
 
@@ -149,3 +157,8 @@ input formats: PNG, JPEG, WebP.
 
 For `codex-hosted`, omit `--n` or set `--n 1`. The direct `image-api` transport
 passes `--n` through to the Images API request.
+
+Large, complex, high-quality, or 4K `gpt-image-2` requests can take up to about
+2 minutes. For text-heavy images such as screenshots, labels, posters, or
+newspapers, include ALL required text in the prompt. `gpt-image-2` is very
+likely to render prompt-provided text correctly.

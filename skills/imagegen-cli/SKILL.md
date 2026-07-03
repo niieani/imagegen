@@ -26,9 +26,11 @@ Edit one or more images, or use them as references for a new output:
 imagegen edit \
   --image input.png \
   --prompt "use the input as a reference and create a matching product photo" \
-  --background transparent \
   --out output.png
 ```
+
+Read `references/image-api.md` before using exact size controls, transparency,
+text-heavy images, or quality/latency tradeoffs.
 
 ## Workflow
 
@@ -39,7 +41,8 @@ imagegen edit \
    convention when known.
 3. Run `imagegen generate` for text-to-image requests and `imagegen edit` for
    transformations of existing images or for using input images as references.
-   For edits, make the prompt specify what to do with the inputs.
+   For edits, make the prompt specify each input's role, what to change, and
+   what to preserve.
 4. After success, report the output path. In Codex desktop, show the image with
    Markdown using an absolute filesystem path when useful.
 
@@ -51,10 +54,14 @@ Both `generate` and `edit` support:
   composition, background, text handling, and output constraints.
 - `--out <PATH>`: required. Must be a `.png` file. The CLI creates parent
   directories as needed.
-- `--model <MODEL>`: defaults to `gpt-image-2`.
-- `--background <auto|opaque|transparent>`: defaults to `auto`.
-- `--quality <auto|low|medium|high>`: defaults to `auto`; use `low` for drafts.
-- `--size <SIZE>`: defaults to `auto`; pass the user's requested size exactly.
+- `--model <MODEL>`: defaults to `gpt-image-2`, the default for new work.
+- `--background <auto|opaque|transparent>`: defaults to `auto`. Do not request
+  `transparent` with `gpt-image-2`; the model does not support it.
+- `--quality <auto|low|medium|high>`: defaults to `auto`; use `low` for drafts
+  and `medium`/`high` for dense text, final assets, identity-sensitive edits, or
+  high-resolution output.
+- `--size <SIZE>`: defaults to `auto`. For `gpt-image-2`, use a popular size or
+  a valid custom `WIDTHxHEIGHT`; see `references/image-api.md`.
 - `--n <N>`: omit unless requested. `codex-hosted` supports only one output.
 - `--transport <codex-hosted|image-api>`: use the default unless the user or
   provider setup requires a specific transport.
@@ -64,6 +71,17 @@ Both `generate` and `edit` support:
 `edit` additionally requires one to five `--image <PATH>` inputs. Provide the
 flag multiple times to pass multiple images. Supported input extensions are
 `.png`, `.jpg`, `.jpeg`, and `.webp`.
+
+## gpt-image-2 Notes
+
+- Strong text rendering: `gpt-image-2` can generate a newspaper page or
+  screenshot with ALL text provided in the prompt and is very likely to render
+  that text correctly. Do not assume image models are still bad at text. Quote
+  literal strings and specify typography and placement.
+- High-res or complex prompts can take up to about 2 minutes, especially 4K and
+  high-quality work. Warn before starting large batches.
+- `background=transparent` is unsupported for `gpt-image-2`; use opaque/chroma
+  key workflows or a different confirmed model path when true alpha is required.
 
 ## Failure Handling
 
