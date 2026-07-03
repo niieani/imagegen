@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.0](https://github.com/niieani/imagegen/compare/v0.2.0...v0.3.0) (2026-07-03)
+
+
+### Features
+
+* support prompt variant batches ([686afa4](https://github.com/niieani/imagegen/commit/686afa4ef9753ca39e5ef46f6cc38f3411f20721))
+
 ## [0.2.0](https://github.com/niieani/imagegen/compare/v0.1.0...v0.2.0) (2026-06-15)
 
 
