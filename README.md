@@ -108,10 +108,21 @@ imagegen generate \
   --out teapot.png
 ```
 
+Prompt variants append to the base prompt and write one output per variant:
+
+```sh
+imagegen generate \
+  --prompt "studio product photo of a ceramic teapot" \
+  --variant "matte black, hard side light" \
+  --variant "pale blue, soft morning light" \
+  --out teapot.png
+```
+
 Default transport is provider-aware. The built-in OpenAI provider uses
 `codex-hosted`, which uses Codex OAuth against the Responses API image
-generation tool and supports one output image per request. Custom
-`model_provider` entries use `image-api` by default. Pass
+generation tool. Hosted requests produce one image each, so the CLI fans out
+`--n` and variants client-side. Custom `model_provider` entries use `image-api`
+by default. Pass
 `--transport codex-hosted` to force Codex-hosted generation when Codex login is
 available.
 
@@ -149,14 +160,22 @@ Both `generate` and `edit` expose:
 - `--size` default `auto`; for `gpt-image-2`, custom sizes must have max edge
   `<=3840px`, both edges divisible by 16, aspect ratio `<=3:1`, and total
   pixels between `655360` and `8294400`
-- `--n`
+- `--n` samples per prompt
+- `--variant` prompt text appended to `--prompt`; repeat for batch variants
+- `--variant-separator` text inserted between `--prompt` and each `--variant`;
+  accepts any text; decodes `\n`, `\r`, `\t`, and `\\`; other backslashes are
+  literal; default is `\n`
 - `--transport` one of `codex-hosted`, `image-api`
 
 `edit` additionally requires one or more repeated `--image` paths. Supported
 input formats: PNG, JPEG, WebP.
 
-For `codex-hosted`, omit `--n` or set `--n 1`. The direct `image-api` transport
-passes `--n` through to the Images API request.
+For one output, the exact `--out` path is used. Batches write suffixed files:
+`out-001.png` for `--n` or variants, and `out-001-01.png` for variants with
+multiple samples.
+
+The direct `image-api` transport passes `--n` through to the Images API request.
+The hosted transport parallelizes single-output hosted requests.
 
 Large, complex, high-quality, or 4K `gpt-image-2` requests can take up to about
 2 minutes. For text-heavy images such as screenshots, labels, posters, or

@@ -3,7 +3,9 @@ use clap::Parser;
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    let out = imagegen::run(imagegen::Cli::parse()).await?;
-    println!("{}", out.display());
+    let outputs = imagegen::run(imagegen::Cli::parse()).await?;
+    for out in outputs {
+        println!("{}", out.display());
+    }
     Ok(())
 }

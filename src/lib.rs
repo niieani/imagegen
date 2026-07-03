@@ -1,10 +1,13 @@
 use std::path::PathBuf;
+use std::sync::Arc;
 
 use anyhow::Context;
 use anyhow::Result;
+use tokio::task::JoinSet;
 
 mod args;
 mod auth;
+mod batch;
 mod config;
 mod hosted;
 mod image_io;
@@ -13,47 +16,95 @@ pub use args::Cli;
 
 use args::Command;
 use args::TransportArg;
+use batch::PromptBatch;
 use config::CodexConfig;
 use hosted::HostedImageArgs;
 use hosted::hosted_image_generation;
-use image_io::direct_image_api_edit;
-use image_io::direct_image_api_generate;
+use image_io::direct_image_api_edit_batch;
+use image_io::direct_image_api_generate_batch;
 use image_io::edit_input_images;
 use image_io::write_base64_image;
 
-pub async fn run(cli: Cli) -> Result<PathBuf> {
+pub async fn run(cli: Cli) -> Result<Vec<PathBuf>> {
     let codex_config = CodexConfig::load(cli.codex_home).await?;
-    let out = match cli.command {
+    let outputs = match cli.command {
         Command::Generate(args) => {
+            let batch = PromptBatch::new(
+                &args.prompt,
+                &args.out,
+                &args.variants,
+                args.variant_separator.as_deref(),
+                args.n,
+            )?;
             if resolve_transport(&codex_config, args.transport) == TransportArg::ImageApi {
-                direct_image_api_generate(&codex_config, &args).await?
+                direct_image_api_generate_batch(&codex_config, &args, &batch).await?
             } else {
-                let result =
-                    hosted_image_generation(&codex_config, HostedImageArgs::from(&args), None)
-                        .await
-                        .context("image generation request failed")?;
-                write_base64_image(&result, &args.out).await?;
-                args.out
+                hosted_image_batch(
+                    &codex_config,
+                    HostedImageArgs::from(&args),
+                    &batch,
+                    Vec::new(),
+                    "image generation request failed",
+                )
+                .await?
             }
         }
         Command::Edit(args) => {
+            let batch = PromptBatch::new(
+                &args.prompt,
+                &args.out,
+                &args.variants,
+                args.variant_separator.as_deref(),
+                args.n,
+            )?;
             if resolve_transport(&codex_config, args.transport) == TransportArg::ImageApi {
-                direct_image_api_edit(&codex_config, &args).await?
+                direct_image_api_edit_batch(&codex_config, &args, &batch).await?
             } else {
-                let input_images = edit_input_images(&args).await?;
-                let result = hosted_image_generation(
+                let input_images = edit_input_images(&args).await?.unwrap_or_default();
+                hosted_image_batch(
                     &codex_config,
                     HostedImageArgs::from(&args),
+                    &batch,
                     input_images,
+                    "image edit request failed",
                 )
-                .await
-                .context("image edit request failed")?;
-                write_base64_image(&result, &args.out).await?;
-                args.out
+                .await?
             }
         }
     };
-    Ok(out)
+    Ok(outputs)
+}
+
+async fn hosted_image_batch(
+    config: &CodexConfig,
+    base_args: HostedImageArgs,
+    batch: &PromptBatch,
+    input_images: Vec<String>,
+    request_context: &'static str,
+) -> Result<Vec<PathBuf>> {
+    let jobs = batch.single_output_jobs();
+    let input_images = Arc::new(input_images);
+    let mut tasks = JoinSet::new();
+
+    for (index, job) in jobs.into_iter().enumerate() {
+        let config = config.clone();
+        let args = base_args.single_output_prompt(job.prompt);
+        let input_images = Arc::clone(&input_images);
+        tasks.spawn(async move {
+            let image = hosted_image_generation(&config, args, input_images.as_slice())
+                .await
+                .context(request_context)?;
+            write_base64_image(&image, &job.out).await?;
+            Ok::<_, anyhow::Error>((index, job.out))
+        });
+    }
+
+    let mut outputs = Vec::new();
+    while let Some(result) = tasks.join_next().await {
+        outputs.push(result.context("hosted image task failed")??);
+    }
+    outputs.sort_by_key(|(index, _)| *index);
+    Ok(outputs.into_iter().map(|(_, out)| out).collect())
 }
 
 fn resolve_transport(config: &CodexConfig, transport: Option<TransportArg>) -> TransportArg {
@@ -197,6 +248,29 @@ mod tests {
     }
 
     #[test]
+    fn generate_accepts_repeated_variants_and_separator() {
+        let cli = Cli::parse_from([
+            "imagegen",
+            "generate",
+            "--prompt",
+            "product photo",
+            "--variant",
+            "red",
+            "--variant",
+            "blue",
+            "--variant-separator",
+            "\\n\\n",
+            "--out",
+            "out.png",
+        ]);
+        let Command::Generate(args) = cli.command else {
+            panic!("expected generate command");
+        };
+        assert_eq!(args.variants, vec!["red", "blue"]);
+        assert_eq!(args.variant_separator.as_deref(), Some("\\n\\n"));
+    }
+
+    #[test]
     fn transport_is_optional_and_explicit_choice_is_preserved() {
         let defaulted = Cli::parse_from([
             "imagegen",
@@ -240,6 +314,8 @@ mod tests {
             quality: QualityArg::Auto,
             size: "auto".to_string(),
             n: None,
+            variants: Vec::new(),
+            variant_separator: None,
             transport: Some(TransportArg::CodexHosted),
         };
 

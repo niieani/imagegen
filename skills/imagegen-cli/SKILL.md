@@ -62,7 +62,11 @@ Both `generate` and `edit` support:
   high-resolution output.
 - `--size <SIZE>`: defaults to `auto`. For `gpt-image-2`, use a popular size or
   a valid custom `WIDTHxHEIGHT`; see `references/image-api.md`.
-- `--n <N>`: omit unless requested. `codex-hosted` supports only one output.
+- `--n <N>`: samples per prompt. `codex-hosted` fans out client-side.
+- `--variant <TEXT>`: append to `--prompt`; repeat for batch variants.
+- `--variant-separator <TEXT>`: inserted between `--prompt` and each variant.
+  Accepts any text; decodes `\n`, `\r`, `\t`, and `\\`; other backslashes are
+  literal; default is `\n`.
 - `--transport <codex-hosted|image-api>`: use the default unless the user or
   provider setup requires a specific transport.
 - `--codex-home <DIR>`: use only when the user specifies a nonstandard Codex
@@ -91,5 +95,5 @@ flag multiple times to pass multiple images. Supported input extensions are
   (`codex login`) and that the agent cannot continue until authentication works.
 - Unsupported input format: ask for or convert to PNG/JPEG/WebP only if a normal
   local conversion tool is already available.
-- `codex-hosted` with `--n` greater than 1: rerun with one output or switch to
-  `--transport image-api` only when the provider supports it.
+- Hosted batch failure: rerun the failed prompt/output only; hosted batches are
+  independent single-output requests.

@@ -62,6 +62,11 @@ Custom gpt-image-2 sizes must satisfy all constraints: max edge <=3840px,
 both edges multiples of 16px, long:short ratio <=3:1, and total pixels between
 655360 and 8294400. Square images are usually fastest.";
 
+const VARIANT_SEPARATOR_HELP: &str = "\
+Text inserted between --prompt and each --variant. Any text is accepted.
+Escapes \\n, \\r, \\t, and \\\\ are decoded; other backslashes are literal.
+Default is \\n.";
+
 #[derive(Debug, Parser)]
 #[command(version, about, long_about = CLI_LONG_ABOUT, after_long_help = CLI_AFTER_LONG_HELP)]
 pub struct Cli {
@@ -123,8 +128,23 @@ pub struct GenerateArgs {
     )]
     pub size: String,
 
-    #[arg(long, help = "Number of images; codex-hosted supports only 1")]
+    #[arg(long, help = "Samples per prompt; codex-hosted fans out client-side")]
     pub n: Option<u64>,
+
+    #[arg(
+        long = "variant",
+        value_name = "TEXT",
+        help = "Prompt variant appended to --prompt; repeat for batches"
+    )]
+    pub variants: Vec<String>,
+
+    #[arg(
+        long,
+        value_name = "TEXT",
+        help = "Text inserted between --prompt and each --variant",
+        long_help = VARIANT_SEPARATOR_HELP
+    )]
+    pub variant_separator: Option<String>,
 
     #[arg(long, help = "Force transport instead of provider-aware default")]
     pub transport: Option<TransportArg>,
@@ -172,8 +192,23 @@ pub struct EditArgs {
     )]
     pub size: String,
 
-    #[arg(long, help = "Number of images; codex-hosted supports only 1")]
+    #[arg(long, help = "Samples per prompt; codex-hosted fans out client-side")]
     pub n: Option<u64>,
+
+    #[arg(
+        long = "variant",
+        value_name = "TEXT",
+        help = "Prompt variant appended to --prompt; repeat for batches"
+    )]
+    pub variants: Vec<String>,
+
+    #[arg(
+        long,
+        value_name = "TEXT",
+        help = "Text inserted between --prompt and each --variant",
+        long_help = VARIANT_SEPARATOR_HELP
+    )]
+    pub variant_separator: Option<String>,
 
     #[arg(long, help = "Force transport instead of provider-aware default")]
     pub transport: Option<TransportArg>,

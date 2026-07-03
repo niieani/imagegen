@@ -24,14 +24,14 @@ use crate::config::CodexConfig;
 pub(crate) async fn hosted_image_generation(
     config: &CodexConfig,
     args: HostedImageArgs,
-    input_images: Option<Vec<String>>,
+    input_images: &[String],
 ) -> Result<String> {
     if args.n.is_some_and(|n| n != 1) {
         bail!("Codex-hosted image generation supports only one output image");
     }
 
     let (api_provider, api_auth) = authenticated_responses_session(config).await?;
-    let input = hosted_response_input(&args.prompt, input_images.unwrap_or_default());
+    let input = hosted_response_input(&args.prompt, input_images);
     let request = ResponsesApiRequest {
         model: config.model.clone(),
         instructions: "Use the image generation tool to create the requested image.".to_string(),
@@ -131,6 +131,19 @@ pub(crate) struct HostedImageArgs {
     n: Option<u64>,
 }
 
+impl HostedImageArgs {
+    pub(crate) fn single_output_prompt(&self, prompt: String) -> Self {
+        Self {
+            prompt,
+            model: self.model.clone(),
+            background: self.background,
+            quality: self.quality,
+            size: self.size.clone(),
+            n: None,
+        }
+    }
+}
+
 impl From<&GenerateArgs> for HostedImageArgs {
     fn from(value: &GenerateArgs) -> Self {
         Self {
@@ -169,13 +182,14 @@ fn hosted_image_tool(args: &HostedImageArgs) -> serde_json::Value {
     })
 }
 
-fn hosted_response_input(prompt: &str, input_images: Vec<String>) -> Vec<ResponseItem> {
+fn hosted_response_input(prompt: &str, input_images: &[String]) -> Vec<ResponseItem> {
     let mut content = vec![ContentItem::InputText {
         text: prompt.to_string(),
     }];
     content.extend(
         input_images
-            .into_iter()
+            .iter()
+            .cloned()
             .map(|image_url| ContentItem::InputImage {
                 image_url,
                 detail: None,

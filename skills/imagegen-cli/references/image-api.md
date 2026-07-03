@@ -9,7 +9,7 @@ Use this for model behavior, size choices, latency, and edit prompting.
 Local `imagegen` commands:
 
 - `generate`: `--prompt`, `--out`, `--model`, `--background`, `--quality`,
-  `--size`, `--n`, `--transport`
+  `--size`, `--n`, `--variant`, `--variant-separator`, `--transport`
 - `edit`: same controls plus one to five repeated `--image` inputs
 - PNG output only
 
